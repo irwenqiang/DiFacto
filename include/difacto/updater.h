@@ -35,9 +35,8 @@ class Updater {
   /**
    * \brief load the updater
    * \param fi input stream
-   * \param has_aux whether the loaded updater has aux data
    */
-  virtual void Load(dmlc::Stream* fi, bool* has_aux) = 0;
+  virtual void Load(dmlc::Stream* fi) = 0;
 
   /**
    * \brief save the updater
@@ -67,7 +66,10 @@ class Updater {
                       int data_type,
                       const SArray<real_t>& data,
                       const SArray<int>& data_offset) = 0;
-};
+
+  /** \brief report weight info to scheduler */
+  virtual void Report() = 0;
+ };
 
 }  // namespace difacto
 #endif  // DIFACTO_UPDATER_H_

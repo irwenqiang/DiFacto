@@ -41,10 +41,18 @@ class LogitLoss : public Loss {
   void Predict(const dmlc::RowBlock<unsigned>& data,
                const std::vector<SArray<char>>& param,
                SArray<real_t>* pred) override {
-    int psize = param.size();
-    CHECK_GE(psize, 1); CHECK_LE(psize, 2);
-    SArray<real_t> w(param[0]);
-    SArray<int> w_pos = psize == 2 ? SArray<int>(param[1]) : SArray<int>();
+    CHECK_EQ(param.size(), 3);
+    Predict(data,
+            SArray<real_t>(param[0]),
+            SArray<int>(param[1]),
+            pred);
+  }
+
+  void Predict(const dmlc::RowBlock<unsigned>& data,
+               const SArray<real_t>& weights,
+               const SArray<int>& w_pos,
+               SArray<real_t>* pred) {
+    SArray<real_t> w = weights;
     SpMV::Times(data, w, pred, nthreads_, w_pos, {});
   }
 
@@ -63,11 +71,21 @@ class LogitLoss : public Loss {
   void CalcGrad(const dmlc::RowBlock<unsigned>& data,
                 const std::vector<SArray<char>>& param,
                 SArray<real_t>* grad) override {
-    int psize = param.size();
-    CHECK_GE(psize, 1);
-    CHECK_LE(psize, 2);
-    SArray<real_t> p; p.CopyFrom(SArray<real_t>(param[0]));
-    SArray<int> grad_pos = psize == 2 ? SArray<int>(param[1]) : SArray<int>();
+    CHECK_EQ(param.size(), 4);
+    CalcGrad(data,
+             SArray<real_t>(param[0]),
+             SArray<int>(param[1]),
+             SArray<real_t>(param[3]),
+             grad);
+  }
+
+  void CalcGrad(const dmlc::RowBlock<unsigned>& data,
+                const SArray<real_t>& weights,
+                const SArray<int>& w_pos,
+                const SArray<real_t>& pred,
+                SArray<real_t>* grad) {
+    SArray<real_t> p; p.CopyFrom(pred);
+    CHECK_EQ(p.size(), data.size);
     // p = ...
     CHECK_NOTNULL(data.label);
 #pragma omp parallel for num_threads(nthreads_)
@@ -77,7 +95,7 @@ class LogitLoss : public Loss {
     }
 
     // grad += ...
-    SpMV::TransTimes(data, p, grad, nthreads_, {}, grad_pos);
+    SpMV::TransTimes(data, p, grad, nthreads_, {}, w_pos);
   }
 };
 

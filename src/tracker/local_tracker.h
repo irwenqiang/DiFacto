@@ -30,6 +30,13 @@ class LocalTracker : public Tracker {
     tracker_->Issue(jobs);
   }
 
+  void IssueAndWait(int node_id, std::string args) override {
+    Issue({std::make_pair(node_id, args)});
+    tracker_->Wait(0);
+  };
+
+  void StartDispatch(int num_jobs_per_epoch, int job_type, int epoch) {};
+
   int NumRemains() override {
     return CHECK_NOTNULL(tracker_)->NumRemains();
   }

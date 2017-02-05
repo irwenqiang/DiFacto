@@ -3,22 +3,17 @@
  */
 #include "./sgd_learner.h"
 #include <stdlib.h>
-#include <chrono>
 #include <memory>
 #include <thread>
 #include <vector>
 #include <utility>
-#include "dmlc/data.h"
+#include "dmlc/timer.h"
 #include "reader/batch_reader.h"
-#include "reader/reader.h"
 #include "tracker/async_local_tracker.h"
 #include "data/shared_row_block_container.h"
 #include "data/row_block.h"
 #include "data/localizer.h"
-#include "dmlc/timer.h"
-#include "difacto/node_id.h"
 #include "loss/bin_class_metric.h"
-#include "./sgd_updater.h"
 namespace difacto {
 
 /** \brief struct to hold info for a batch job */
@@ -28,19 +23,62 @@ struct BatchJob {
   SharedRowBlockContainer<unsigned> data;
 };
 
-void SGDLearner::RunScheduler() {
+KWArgs SGDLearner::Init(const KWArgs& kwargs) {
+  // init tracker
+  auto remain = Learner::Init(kwargs);
+  // init param
+  remain = param_.InitAllowUnknown(remain);
+  // init reporter
+  reporter_ = Reporter::Create();
+  remain = reporter_->Init(remain);
+  // init updater
+  auto updater = new SGDUpdater();
+  remain = updater->Init(remain);
+  updater->SetReporter(
+      [this](const std::string& prog)->int {
+       return reporter_->Report(prog);
+      });
+  remain.push_back(std::make_pair("V_dim", std::to_string(updater->param().V_dim)));
+  // init do embedding
+  if (updater->param().V_dim > 0) do_embedding_ = true;
+  // init store
+  store_ = Store::Create();
+  store_->SetUpdater(std::shared_ptr<Updater>(updater));
+  remain = store_->Init(remain);
+  // init loss
+  loss_ = Loss::Create(param_.loss, blk_nthreads_);
+  remain = loss_->Init(remain);
+  
+  return remain;
+}
+
+void SGDLearner::RunScheduler() { 
   real_t pre_loss = 0, pre_val_auc = 0;
   int k = 0;
+  start_time_ = dmlc::GetTime();
+
+  // load model for incremental learning
+  if (param_.model_in.size()) {
+    if (param_.load_epoch > 0) {
+      LOG(INFO) << "Loading model from epoch " << param_.load_epoch;
+      SaveLoadModel(sgd::Job::kLoadModel, param_.load_epoch);
+      k = param_.load_epoch + 1;
+    } else {
+      LOG(INFO) << "loading lastest model...";
+      SaveLoadModel(sgd::Job::kLoadModel);
+    }
+  }
+
   for (; k < param_.max_num_epochs; ++k) {
     sgd::Progress train_prog;
     LOG(INFO) << "Start epoch " << k;
     RunEpoch(k, sgd::Job::kTraining, &train_prog);
-    LOG(INFO) << " - Training: " << train_prog.TextString();
+    LOG(INFO) << "Epoch[" << k << "] Training: " << train_prog.TextString();
 
     sgd::Progress val_prog;
     if (param_.data_val.size()) {
       RunEpoch(k, sgd::Job::kValidation, &val_prog);
-      LOG(INFO) << " - Validation: " << val_prog.TextString();
+      LOG(INFO) << "Epoch[" << k << "] Validation: " << val_prog.TextString();
     }
     for (const auto& cb : epoch_end_callback_) cb(k, train_prog, val_prog);
 
@@ -60,11 +98,20 @@ void SGDLearner::RunScheduler() {
       }
     }
     if (k+1 >= param_.max_num_epochs) {
-      LOG(INFO) << "Reach maximal number of epochs";
+      LOG(INFO) << "Reach maximal number of epochs " << param_.max_num_epochs;
+      break;
     }
     pre_loss = train_prog.loss;
     pre_val_auc = val_prog.auc;
   }
+
+  // Save last model
+  if (param_.model_out.size()) {
+    LOG(INFO) << "Saving the final model...";
+    SaveLoadModel(sgd::Job::kSaveModel);
+    LOG(INFO) << "Save model finished";
+  }
+  Stop();
 }
 
 void SGDLearner::RunEpoch(int epoch, int job_type, sgd::Progress* prog) {
@@ -74,40 +121,22 @@ void SGDLearner::RunEpoch(int epoch, int job_type, sgd::Progress* prog) {
         prog->Merge(rets);
       });
 
-  // issue jobs
+  // progress reporter
+  reporter_->SetMonitor(
+      [this](int node_id, const std::string& rets) {
+        report_prog_.prog.Merge(rets);
+      });
+
+  // Start Dispatch
   int n = store_->NumWorkers() * param_.num_jobs_per_epoch;
-  std::vector<std::pair<int, std::string>> jobs(n);
-  for (int i = 0; i < n; ++i) {
-    jobs[i].first = NodeID::kWorkerGroup;
-    sgd::Job job;
-    job.type = job_type;
-    job.epoch = epoch;
-    job.num_parts = n;
-    job.part_idx = i;
-    job.SerializeToString(&jobs[i].second);
-  }
-  tracker_->Issue(jobs);
+  tracker_->StartDispatch(n, job_type, epoch);
 
-  // wait
+  // wait and report
   while (tracker_->NumRemains()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    printf("%5.0lf  %s\n", dmlc::GetTime() - start_time_, report_prog_.PrintStr().c_str());
+    fflush(stdout);
   }
-
-  // get penalty from servers
-  // if (job_type == sgd::Job::kTraining) {
-  //   int n = store_->NumServers();
-  //   std::vector<std::pair<int, std::string>> jobs(n);
-  //   for (int i = 0; i < n; ++i) {
-  //     jobs[i].first = NodeID::Encode(NodeID::kServerGroup, i);
-  //     sgd::Job job;
-  //     job.type = sgd::Job::kEvaluation;
-  //     job.SerializeToString(&jobs[i].second);
-  //   }
-  //   tracker_->Issue(jobs);
-  //   while (tracker_->NumRemains()) {
-  //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  //   }
-  // }
 }
 
 void SGDLearner::GetPos(const SArray<int>& len,
@@ -126,58 +155,110 @@ void SGDLearner::GetPos(const SArray<int>& len,
   }
 }
 
+void SGDLearner::Process(const std::string& args, std::string* rets) {
+  if (args.empty()) return;
+  using sgd::Job;
+  sgd::Progress prog;
+  Job job; job.ParseFromString(args);
+  switch(job.type) {
+    case Job::kTraining:
+    case Job::kValidation: {
+      IterateData(job, &prog);
+      break;
+    }
+    case Job::kEvaluation: {
+      GetUpdater()->Evaluate(&prog);
+      break;
+    }
+    case Job::kLoadModel: {
+      std::string filename = ModelName(param_.model_in, job.epoch);
+      std::unique_ptr<dmlc::Stream> fi(
+          dmlc::Stream::Create(filename.c_str(), "r"));
+      GetUpdater()->Load(fi.get());
+      break;
+    }
+    case Job::kSaveModel: {
+      std::string filename = ModelName(param_.model_out, job.epoch);
+      std::unique_ptr<dmlc::Stream> fo(
+          dmlc::Stream::Create(filename.c_str(), "w"));
+      GetUpdater()->Save(param_.has_aux, fo.get());
+      break;
+    }
+  }
+  prog.SerializeToString(rets);
+}
+
 void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
   AsyncLocalTracker<BatchJob> batch_tracker;
   batch_tracker.SetExecutor(
       [this, progress](const BatchJob& batch,
                        const std::function<void()>& on_complete,
                        std::string* rets) {
+        double start = dmlc::GetTime();
         // use potiners here in order to copy into the callback
-        auto values = new SArray<real_t>();
-        auto lengths = new SArray<int>();
-        auto pull_callback = [this, batch, values, lengths, progress, on_complete]() {
+        SArray<real_t>* values = new SArray<real_t>();
+        SArray<int>* lengths = do_embedding_ ? new SArray<int>() : nullptr;
+        auto pull_callback = [this, start, batch, values, lengths, progress, on_complete]() {
+          pull_time_ += dmlc::GetTime() - start;
+          double start1 = dmlc::GetTime();
           // eval loss
+          sgd::Progress report_prog;
           auto data = batch.data.GetBlock();
           progress->nrows += data.size;
+          report_prog.nrows = data.size;
           SArray<real_t> pred(data.size);
           SArray<int> w_pos, V_pos;
-          GetPos(*lengths, &w_pos, &V_pos);
+          if (lengths) GetPos(*lengths, &w_pos, &V_pos);
           std::vector<SArray<char>> inputs = {
             SArray<char>(*values), SArray<char>(w_pos), SArray<char>(V_pos)};
           CHECK_NOTNULL(loss_)->Predict(data, inputs, &pred);
-          progress->loss += loss_->Evaluate(batch.data.label.data(), pred);
+          auto loss = loss_->Evaluate(batch.data.label.data(), pred);
+          progress->loss += loss;
+          report_prog.loss = loss;
           // eval penalty
-          progress->penalty += EvaluatePenalty(*values, w_pos, V_pos);
+          //progress->penalty += EvaluatePenalty(*values, w_pos, V_pos);
 
           // auc, ...
           BinClassMetric metric(batch.data.label.data(), pred.data(),
                                 pred.size(), blk_nthreads_);
-          progress->auc += metric.AUC();
+          auto auc = metric.AUC();
+          progress->auc += auc;
+          report_prog.auc = auc;
+
+          // report progress to SCH
+          std::string rets;
+          report_prog.SerializeToString(&rets);
+          reporter_->Report(rets);
 
           // calculate the gradients
           if (batch.type == sgd::Job::kTraining) {
             SArray<real_t> grads(values->size());
             inputs.push_back(SArray<char>(pred));
             loss_->CalcGrad(data, inputs, &grads);
+            grad_time_ += dmlc::GetTime()-start1;
 
             // push the gradient, this task is done only if the push is complete
+            double start2 = dmlc::GetTime();
+            SArray<int> len = {};
             store_->Push(batch.feaids,
                          Store::kGradient,
                          grads,
-                         *lengths,
-                         [on_complete]() { on_complete(); });
+                         lengths ? *lengths : len,
+                         [this, on_complete, start2]() { on_complete(); push_time_ += dmlc::GetTime()-start2; });
           } else {
             // a validation job
             on_complete();
           }
-          delete values;
-          delete lengths;
+          if (values) delete values;
+          if (lengths) delete lengths;
         };
         // pull the weight back
         store_->Pull(batch.feaids, Store::kWeight, values, lengths, pull_callback);
       });
 
   Reader* reader = nullptr;
+  bool push_cnt = job.type == sgd::Job::kTraining && job.epoch == 0 && do_embedding_;
+
   if (job.type == sgd::Job::kTraining) {
     reader = new BatchReader(param_.data_in,
                              param_.data_format,
@@ -198,10 +279,10 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
     auto data = new dmlc::data::RowBlockContainer<unsigned>();
     auto feaids = std::make_shared<std::vector<feaid_t>>();
     auto feacnt = std::make_shared<std::vector<real_t>>();
-    bool push_cnt =
-        job.type == sgd::Job::kTraining && job.epoch == 0;
+    double start = dmlc::GetTime();
     Localizer lc(-1, blk_nthreads_);
     lc.Compact(reader->Value(), data, feaids.get(), push_cnt ? feacnt.get() : nullptr);
+    lc_time_ += dmlc::GetTime() - start;
 
     // save results into batch
     BatchJob batch;
@@ -218,33 +299,13 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
 
     // avoid too many batches are processing in parallel
     while (batch_tracker.NumRemains() > 1) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     batch_tracker.Issue({batch});
   }
   batch_tracker.Wait();
   delete reader;
 }
-
-KWArgs SGDLearner::Init(const KWArgs& kwargs) {
-  auto remain = Learner::Init(kwargs);
-  // init param
-  remain = param_.InitAllowUnknown(remain);
-  // init updater
-  auto updater = new SGDUpdater();
-  remain = updater->Init(remain);
-  remain.push_back(std::make_pair("V_dim", std::to_string(updater->param().V_dim)));
-  // init store
-  store_ = Store::Create();
-  store_->SetUpdater(std::shared_ptr<Updater>(updater));
-  remain = store_->Init(remain);
-  // init loss
-  loss_ = Loss::Create(param_.loss, blk_nthreads_);
-  remain = loss_->Init(remain);
-
-  return remain;
-}
-
 
 real_t SGDLearner::EvaluatePenalty(const SArray<real_t>& weights,
                                    const SArray<int>& w_pos,

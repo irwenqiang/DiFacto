@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <atomic>
 #include "./base.h"
 #include "dmlc/io.h"
 #include "dmlc/parameter.h"
@@ -48,7 +49,7 @@ class Store {
    * @param lens
    * @param on_complete
    *
-   * @return
+   * @return timestamp
    */
   virtual int Push(const SArray<feaid_t>& fea_ids,
                    int val_type,
@@ -64,13 +65,14 @@ class Store {
    * @param lens
    * @param on_complete
    *
-   * @return
+   * @return timestamp
    */
   virtual int Pull(const SArray<feaid_t>& fea_ids,
                    int val_type,
                    SArray<real_t>* vals,
                    SArray<int>* lens,
                    const std::function<void()>& on_complete = nullptr) = 0;
+
 
   /**
    * \brief wait until a push or a pull is actually finished
@@ -93,14 +95,49 @@ class Store {
   virtual int Rank() = 0;
 
   /** \brief set an updater for the store, only required for a server node */
-  void SetUpdater(const std::shared_ptr<Updater>& updater) {
+  virtual void SetUpdater(const std::shared_ptr<Updater>& updater) {
     updater_ = updater;
   }
   /** \brief get the updater */
   std::shared_ptr<Updater> updater() { return updater_; }
 
+
+  /******************************************************
+   * the following are used for multi-machines.
+   ******************************************************/
+
+  /** \brief set whether to do barrier when finalize only for W */
+  virtual void set_barrier_before_exit(const bool barrier_before_exit) {
+    barrier_before_exit_ = barrier_before_exit;
+  }
+
+  /*!
+   * \brief global barrier among all worker machines
+   *
+   * But note that, this functions only blocks the main thread of workers until
+   * all of them are reached this point. It doesn't guarantee that all
+   * operations issued before are actually finished, such as \ref Push and \ref Pull.
+   */
+  virtual void Barrier() { }
+
+  virtual void RunServer() { }
+
+
  protected:
+  /**
+   * \brief the user-defined  updater
+   */
   std::shared_ptr<Updater> updater_;
+
+  /**
+   * \brief the kvstore type BSP SSP TAP
+   */
+  std::string type_;
+
+  /**
+   * \brief whether to do barrier when finalize
+   */
+  std::atomic<bool> barrier_before_exit_{true};
 };
 
 }  // namespace difacto

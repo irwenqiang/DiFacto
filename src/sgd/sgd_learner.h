@@ -6,11 +6,15 @@
 #include <string>
 #include <vector>
 #include "difacto/learner.h"
+#include "difacto/loss.h"
+#include "difacto/store.h"
+#include "difacto/node_id.h"
+#include "difacto/reporter.h"
 #include "./sgd_utils.h"
 #include "./sgd_updater.h"
 #include "./sgd_param.h"
-#include "difacto/loss.h"
-#include "difacto/store.h"
+
+
 namespace difacto {
 
 class SGDLearner : public Learner {
@@ -18,11 +22,15 @@ class SGDLearner : public Learner {
   SGDLearner() {
     store_ = nullptr;
     loss_ = nullptr;
+    reporter_ = nullptr;
   }
 
   virtual ~SGDLearner() {
+    LOG(INFO) <<"Xigou LEARNER";
+    LOG(INFO) <<"mytime " << lc_time_ <<" " << pull_time_ <<" " <<grad_time_  <<" "<< push_time_;
     delete loss_;
     delete store_;
+    delete reporter_;
   }
   KWArgs Init(const KWArgs& kwargs) override;
 
@@ -39,21 +47,25 @@ class SGDLearner : public Learner {
  protected:
   void RunScheduler() override;
 
-  void Process(const std::string& args, std::string* rets) {
-    using sgd::Job;
-    sgd::Progress prog;
-    Job job; job.ParseFromString(args);
-    if (job.type == Job::kTraining ||
-        job.type == Job::kValidation) {
-      IterateData(job, &prog);
-    } else if (job.type == Job::kEvaluation) {
-      GetUpdater()->Evaluate(&prog);
-    }
-    prog.SerializeToString(rets);
-  }
+  void Process(const std::string& args, std::string* rets);
 
  private:
   void RunEpoch(int epoch, int job_type, sgd::Progress* prog);
+
+  /** \brief save or load model */
+  inline void SaveLoadModel(int type, int iter = -1) {
+    sgd::Job job; std::string job_str;
+    job.type = type; job.epoch = iter;
+    job.SerializeToString(&job_str);
+    tracker_->IssueAndWait(NodeID::kServerGroup, job_str);
+  }
+
+  /** \brief get the saved model name only for server */
+  inline std::string ModelName(const std::string& prefix, int iter) {
+    std::string name = prefix;
+    if (iter >= 0) name += "_iter-" + std::to_string(iter);
+    return name + "_part-" + std::to_string(store_->Rank());
+  }
 
   /**
    * \brief iterate on a part of a data
@@ -80,15 +92,25 @@ class SGDLearner : public Learner {
                          const SArray<int>& V_pos);
   void GetPos(const SArray<int>& len,
               SArray<int>* w_pos, SArray<int>* V_pos);
+
   /** \brief the model store*/
   Store* store_;
   /** \brief the loss*/
   Loss* loss_;
+  /** \brief the reporter*/
+  Reporter* reporter_;
   /** \brief parameters */
   SGDLearnerParam param_;
-  // ProgressPrinter pprinter_;
+  // progress for reporter;
+  sgd::Report_prog report_prog_;
   int blk_nthreads_ = DEFAULT_NTHREADS;
+  double start_time_;
+  bool do_embedding_ = false;
 
+  double lc_time_ = 0;
+  double pull_time_ = 0;
+  double push_time_ = 0;
+  double grad_time_ = 0;
   std::vector<std::function<void(int epoch, const sgd::Progress& train,
                                  const sgd::Progress& val)>> epoch_end_callback_;
 };

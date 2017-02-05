@@ -3,12 +3,12 @@
  */
 #include "difacto/reporter.h"
 #include "./local_reporter.h"
+#include "./dist_reporter.h"
 namespace difacto {
 
 Reporter* Reporter::Create() {
   if (IsDistributed()) {
-    LOG(FATAL) << "not implemented";
-    return nullptr;
+    return new DistReporter();
   } else {
     return new LocalReporter();
   }

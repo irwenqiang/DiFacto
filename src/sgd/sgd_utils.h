@@ -19,6 +19,7 @@ struct Job {
   static const int kTraining = 3;
   static const int kValidation = 4;
   static const int kEvaluation = 5;
+  /** \brief job type */
   int type;
   /** \brief number of partitions of this file */
   int num_parts;
@@ -28,12 +29,22 @@ struct Job {
   int epoch;
   Job() { }
   void SerializeToString(std::string* str) const {
-    *str = std::string(reinterpret_cast<char const*>(this), sizeof(Job));
+    dmlc::Stream* ss = new dmlc::MemoryStringStream(str);
+    ss->Write(type);
+    ss->Write(num_parts);
+    ss->Write(part_idx);
+    ss->Write(epoch);
+    delete ss;
   }
 
   void ParseFromString(const std::string& str) {
-    CHECK_EQ(str.size(), sizeof(Job));
-    memcpy(this, str.data(), sizeof(Job));
+    auto copy = str;
+    dmlc::Stream* ss = new dmlc::MemoryStringStream(&copy);
+    ss->Read(&type);
+    ss->Read(&num_parts);
+    ss->Read(&part_idx);
+    ss->Read(&epoch);
+    delete ss;
   }
 };
 
@@ -42,11 +53,11 @@ struct Progress {
   real_t penalty = 0;  //
   real_t auc = 0;   // auc
   real_t nnz_w = 0;  // |w|_0
-  real_t nrows = 0;   // number of examples
+  real_t nrows = 0;  // number of examples
 
   std::string TextString() {
     std::stringstream ss;
-    ss << "loss = " << loss << ", AUC = " << auc / nrows;
+    ss <<"Rows = " << nrows << ", loss = " << loss / nrows << ", AUC = " << auc / nrows;
     return ss.str();
   }
 
@@ -71,6 +82,29 @@ struct Progress {
     auto a = reinterpret_cast<real_t*>(this);
     auto b = reinterpret_cast<real_t const*>(&other);
     for (size_t i = 0; i < n; ++i) a[i] += b[i];
+  }
+
+  void Reset() {
+    loss = 0; penalty = 0;
+    auc = 0; nnz_w = 0;
+    nrows = 0;
+  }
+};
+
+struct Report_prog {
+  Progress prog;
+  real_t nrows = 0;
+  real_t nnz_w = 0;
+
+  std::string PrintStr() {
+    nrows += prog.nrows;
+    nnz_w += prog.nnz_w;
+
+    char buf[256];
+    snprintf(buf, 256, "%9.4g  %7.2g | %9.4g | %6.4lf  %7.5lf ",
+             nrows, prog.nrows, nnz_w, prog.loss / prog.nrows, prog.auc / prog.nrows);
+    prog.Reset(); 
+    return std::string(buf);
   }
 };
 

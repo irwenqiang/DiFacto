@@ -28,8 +28,8 @@ inline void MatchFile(const std::string& pattern,
   // find all files
   dmlc::io::URI path_uri(path.c_str());
   dmlc::io::FileSystem *fs =
-      dmlc::io::FileSystem::GetInstance(path_uri.protocol);
-  std::vector<io::FileInfo> info;
+      dmlc::io::FileSystem::GetInstance(path_uri);
+  std::vector<dmlc::io::FileInfo> info;
   fs->ListDirectory(path_uri, &info);
 
   // store all matached files
@@ -51,6 +51,7 @@ inline void MatchFile(const std::string& pattern,
     if (regexec(&pat, file.c_str(), 1, m, 0)) continue;
     matched->push_back(file);
   }
+  regfree(&pat);
 }
 
 }  // namespace difacto

@@ -43,6 +43,18 @@ class Tracker {
    */
   virtual KWArgs Init(const KWArgs& kwargs) = 0;
 
+  /*!
+   * \return the number of dead node(s) specified by {node_id}
+   * \param node_id can be a node group or a single node
+   * \param timeout a node fails to send heartbeart in {timeout} seconds
+   *        will be presumed as 'dead'
+   *
+   * Always return 0 when run local
+   */
+  virtual int get_num_dead_node(int node_id, int timeout = 60) const {
+    return 0;
+  }
+
   /////////////// functions for the scheduler node /////////////////
   /**
    * \brief issue a job to the executor
@@ -65,7 +77,14 @@ class Tracker {
    * \param jobs the jobs to add
    */
   virtual void Issue(const std::vector<std::pair<int, std::string>>& jobs) = 0;
-
+  /**
+   * \brief send jobs to nodes and wait them finished.
+   */
+  virtual void IssueAndWait(int node_id, std::string args) = 0;
+  /**
+   * \brief start dispath workload
+   */
+  virtual void StartDispatch(int num_jobs_per_epoch, int job_type, int epoch) = 0;
   /**
    * \brief return the number of unfinished job
    */

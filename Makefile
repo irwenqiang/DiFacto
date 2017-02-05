@@ -1,22 +1,27 @@
 # default configures, one can change it by passing new value to make.
 # e.g. `make CXX=g++-4.9`
 CXX = g++
-DEPS_PATH = $(shell pwd)/deps
+include dmlc-core/make/config.mk
+DEPS_PATH = $(shell pwd)/ps-lite/deps
 USE_CITY=0
 USE_LZ4=1
 NO_REVERSE_ID=0
 
 all: build/difacto 
 
+include ps-lite/make/deps.mk
+include ps-lite/make/ps.mk
+include dmlc-core/make/dmlc.mk
+
 INCPATH = -I./src -I./include -I./dmlc-core/include -I./ps-lite/include -I./dmlc-core/src -I$(DEPS_PATH)/include
 PROTOC = ${DEPS_PATH}/bin/protoc
-CFLAGS = -std=c++11 -fopenmp -fPIC -O3 -ggdb -Wall -finline-functions $(INCPATH) -DDMLC_LOG_FATAL_THROW=0 $(ADD_CFLAGS)
+CFLAGS = -std=c++11 -fopenmp -fPIC -g -O3 -ggdb -Wall -finline-functions $(INCPATH) -DDMLC_LOG_FATAL_THROW=0 $(ADD_CFLAGS)
+CFLAGS += $(DMLC_CFLAGS) $(PS_CFLAGS) $(EXTRA_CFLAGS)
+LDFLAGS += $(DMLC_LDFLAGS) $(PS_LDFLAGS) $(EXTRA_LDFLAGS)
 
 ifeq ($(NO_REVERSE_ID), 1)
 CFLAGS += -DREVERSE_FEATURE_ID=0
 endif
-
-include ps-lite/make/deps.mk
 
 ifeq ($(USE_CITY), 1)
 DEPS += ${CITYHASH}
@@ -32,25 +37,28 @@ endif
 
 
 
-# LDFLAGS += $(addprefix $(DEPS_PATH)/lib/, libprotobuf.a libzmq.a)
+LDFLAGS += $(addprefix $(DEPS_PATH)/lib/, libprotobuf.a libzmq.a)
 
-OBJS = $(addprefix build/, loss/loss.o \
-updater.o \
-sgd/sgd_updater.o sgd/sgd_learner.o \
+OBJS = $(addprefix build/, \
 learner.o \
+sgd/sgd_updater.o \
+sgd/sgd_learner.o \
 bcd/bcd_learner.o \
 lbfgs/lbfgs_learner.o \
+loss/loss.o \
 store/store.o \
-tracker/tracker.o \
 reporter/reporter.o \
-data/localizer.o reader/batch_reader.o )
+tracker/tracker.o \
+data/localizer.o \
+reader/batch_reader.o )
 
 DMLC_DEPS = dmlc-core/libdmlc.a
+PS_DEPS = ps-lite/build/libps.a
 
 clean:
 	rm -rf build/*
-	make -C dmlc-core clean
-	make -C ps-lite clean
+	#make -C dmlc-core clean
+	#make -C ps-lite clean
 
 lint:
 	python2 dmlc-core/scripts/lint.py difacto all include src tests/cpp
@@ -64,7 +72,7 @@ build/%.o: src/%.cc ${DEPS}
 build/libdifacto.a: $(OBJS)
 	ar crv $@ $(filter %.o, $?)
 
-build/difacto: build/main.o build/libdifacto.a $(DMLC_DEPS)
+build/difacto: build/main.o build/libdifacto.a $(DMLC_DEPS) $(PS_DEPS)
 	$(CXX) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 dmlc-core/libdmlc.a:

@@ -5,20 +5,35 @@
 #include "common/arg_parser.h"
 #include "dmlc/parameter.h"
 #include "reader/converter.h"
+#include "reader/dump.h"
 namespace difacto {
+
+enum DifactoTask {
+  kTrain = 0,
+  kDumpModel = 1,
+  kPredict = 2,
+  kConvert = 3
+};
+
 struct DifactoParam : public dmlc::Parameter<DifactoParam> {
   /**
    * \brief the type of task,
    * - train: train a model, which is the default
+   * - dump: dump model to readable format
    * - predict: predict by using a trained model
    * - convert: convert data from one format into another
    */
-  std::string task;
+  int task;
   /** \brief the learner's type, required for a training task */
   std::string learner;
   DMLC_DECLARE_PARAMETER(DifactoParam) {
     DMLC_DECLARE_FIELD(learner).set_default("sgd");
-    DMLC_DECLARE_FIELD(task).set_default("train");
+    DMLC_DECLARE_FIELD(task).set_default(kTrain)
+        .add_enum("train", kTrain)
+        .add_enum("dump", kDumpModel)
+        .add_enum("pred", kPredict)
+        .add_enum("convert", kConvert)
+        .describe("Task to be performed by the main program");
   }
 };
 
@@ -32,6 +47,7 @@ void WarnUnknownKWArgs(const DifactoParam& param, const KWArgs& remain) {
 
 DMLC_REGISTER_PARAMETER(DifactoParam);
 DMLC_REGISTER_PARAMETER(ConverterParam);
+DMLC_REGISTER_PARAMETER(DumpParam);
 
 }  // namespace difacto
 
@@ -44,24 +60,43 @@ int main(int argc, char *argv[]) {
 
   // parse configuure
   ArgParser parser;
-  for (int i = 1; i < argc; ++i) parser.AddArg(argv[i]);
+  parser.AddArgFile(argv[1]);
+  for (int i = 2; i < argc; ++i) parser.AddArg(argv[i]);
   DifactoParam param;
   auto kwargs_remain = param.InitAllowUnknown(parser.GetKWArgs());
 
-  // run
-  if (param.task == "train") {
-    Learner* learner = Learner::Create(param.learner);
-    WarnUnknownKWArgs(param, learner->Init(kwargs_remain));
-    learner->Run();
-    delete learner;
-  } else if (param.task == "convert") {
-    Converter converter;
-    WarnUnknownKWArgs(param, converter.Init(kwargs_remain));
-    converter.Run();
-  } else if (param.task == "predict") {
-    LOG(FATAL) << "TODO";
-  } else {
-    LOG(FATAL) << "unknown task: " << param.task;
+  // run task
+  switch (param.task) {
+    case kTrain:
+      {
+      Learner* learner = Learner::Create(param.learner);
+      WarnUnknownKWArgs(param, learner->Init(kwargs_remain));
+      LOG(INFO) << "start run learner";
+      learner->Run();
+      delete learner;
+      }
+      break;
+    case kDumpModel:
+      {
+      Dump dumper;
+      WarnUnknownKWArgs(param, dumper.Init(kwargs_remain));
+      dumper.Run();
+      }
+      break;
+    case kPredict:
+      LOG(FATAL) << "TODO";
+      break;
+    case kConvert:
+      {
+      Converter converter;
+      WarnUnknownKWArgs(param, converter.Init(kwargs_remain));
+      converter.Run();
+      }
+      break;
+    default:
+      LOG(FATAL) << "unknown task: " << param.task;
+      break;
   }
+
   return 0;
 }

@@ -17,11 +17,11 @@ class LocalReporter : public Reporter {
     monitor_ = monitor;
   }
 
-  int Report(const std::string& report) {
+  int Report(const std::string& report) override{
     monitor_(-1, report); return 0;
   }
 
-  void Wait(int timestamp) { }
+  void Wait(int timestamp) override{ }
 
  private:
   Monitor monitor_;

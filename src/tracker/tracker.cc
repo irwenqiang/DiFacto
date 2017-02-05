@@ -3,12 +3,14 @@
  */
 #include "difacto/tracker.h"
 #include "./local_tracker.h"
+#include "./dist_tracker.h"
 namespace difacto {
+
+DMLC_REGISTER_PARAMETER(WorkloadPoolParam);
 
 Tracker* Tracker::Create() {
   if (IsDistributed()) {
-    LOG(FATAL) << "not implemented";
-    return nullptr;
+    return new DistTracker();
   } else {
     return new LocalTracker();
   }

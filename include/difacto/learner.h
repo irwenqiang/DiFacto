@@ -27,7 +27,9 @@ class Learner {
   /** \brief construct */
   Learner() { }
   /** \brief deconstruct */
-  virtual ~Learner() { }
+  virtual ~Learner() {
+    if (tracker_) delete tracker_;
+  }
   /**
    * \brief init learner
    *

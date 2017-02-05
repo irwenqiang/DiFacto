@@ -30,6 +30,7 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
   std::string loss;
   /** \brief the maximal number of data passes */
   int max_num_epochs;
+  int load_epoch;
   /**
    * \brief the minibatch size
    */
@@ -46,6 +47,8 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
   real_t stop_rel_objv;
   /** \brief stop if val_auc_new - val_auc_old < threshold */
   real_t stop_val_auc;
+  /** \brief wether has aux info */
+  bool has_aux;
   DMLC_DECLARE_PARAMETER(SGDLearnerParam) {
     DMLC_DECLARE_FIELD(data_format).set_default("libsvm");
     DMLC_DECLARE_FIELD(data_in);
@@ -53,13 +56,15 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
     DMLC_DECLARE_FIELD(model_out).set_default("");
     DMLC_DECLARE_FIELD(model_in).set_default("");
     DMLC_DECLARE_FIELD(loss).set_default("fm");
+    DMLC_DECLARE_FIELD(load_epoch).set_default(-1);
     DMLC_DECLARE_FIELD(max_num_epochs).set_default(20);
     DMLC_DECLARE_FIELD(num_jobs_per_epoch).set_default(10);
-    DMLC_DECLARE_FIELD(batch_size);
+    DMLC_DECLARE_FIELD(batch_size).set_default(100);
     DMLC_DECLARE_FIELD(shuffle).set_default(10);
     DMLC_DECLARE_FIELD(neg_sampling).set_default(1);
     DMLC_DECLARE_FIELD(stop_rel_objv).set_default(1e-5);
     DMLC_DECLARE_FIELD(stop_val_auc).set_default(1e-5);
+    DMLC_DECLARE_FIELD(has_aux).set_default(false);
   }
 };
 
@@ -101,7 +106,7 @@ struct SGDUpdaterParam : public dmlc::Parameter<SGDUpdaterParam> {
     DMLC_DECLARE_FIELD(V_lr_beta).set_range(0, 10).set_default(1);
     DMLC_DECLARE_FIELD(V_init_scale).set_range(0, 10).set_default(.01);
     DMLC_DECLARE_FIELD(V_threshold).set_default(10);
-    DMLC_DECLARE_FIELD(V_dim);
+    DMLC_DECLARE_FIELD(V_dim).set_default(0);
     DMLC_DECLARE_FIELD(seed).set_default(0);
   }
 };

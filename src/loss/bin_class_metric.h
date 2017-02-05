@@ -36,6 +36,7 @@ class BinClassMetric {
     size_t n = size_;
     struct Entry { dmlc::real_t label; real_t predict; };
     std::vector<Entry> buff(n);
+#pragma omp parallel for num_threads(nt_)
     for (size_t i = 0; i < n; ++i) {
       buff[i].label = label_[i];
       buff[i].predict = predict_[i];
@@ -88,6 +89,16 @@ class BinClassMetric {
       objv += log(1 + exp(- y * predict_[i]));
     }
     return objv;
+  }
+
+  real_t RMSE() {
+    real_t loss = 0;
+#pragma omp parallel for reduction(+:loss) num_threads(nt_)
+    for (size_t i = 0; i < size_; ++i) {
+      real_t diff = label_[i] - predict_[i];
+      loss += diff;
+    }
+    return loss;
   }
 
  private:
