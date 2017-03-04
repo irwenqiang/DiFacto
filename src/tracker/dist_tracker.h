@@ -7,16 +7,15 @@
 #include <utility>
 #include <unordered_map>
 #include <string>
-#include <queue>
 #include <functional>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <unistd.h>
+#include "ps/ps.h"
 #include "difacto/tracker.h"
 #include "difacto/node_id.h"
 #include "reader/workload_pool.h"
-#include "ps/ps.h"
 #include "sgd/sgd_utils.h"
 
 namespace difacto {
@@ -94,13 +93,6 @@ class DistTracker : public Tracker {
     pool_.ClearRemain();
   }
 
-  void Wait(int num_remains) {
-    //std::unique_lock<std::mutex> lk(mu_);
-    //fin_cond_.wait(lk, [this, num_remains] {
-    //    return pending_.size() + running_.size() <= size_t(num_remains);
-    //  });
-  }
-
   /**
    * \block as a daemon until producer called Stop
    */
@@ -110,7 +102,9 @@ class DistTracker : public Tracker {
   }
 
   void Stop() override {
-    Wait(0);
+    while(NumRemains()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
     int ts = Send(kStopExec, "", NodeID::kServerGroup + NodeID::kWorkerGroup);
     app_->Wait(ts);
     done_ = true;
@@ -167,10 +161,12 @@ class DistTracker : public Tracker {
   
   void Monitoring() {
     while (!done_) {
-      auto dead_nodes = ps::Postoffice::Get()->GetDeadNodes();
+      auto dead_nodes = ps::Postoffice::Get()->GetDeadNodes(0);
       if (dead_nodes.size()) {
         if (IsScheduler()) {
-
+          for (auto id : dead_nodes) {
+            pool_.Reset(id);
+          }
         } else {
           LOG(WARNING) << "Scheduler is died, Stop myself";
           ForceExit();

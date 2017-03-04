@@ -30,7 +30,7 @@ struct SGDEntry {
   /** \brief size of w+V */
   int size = 1;
   /** \brief wether entry is empty */
-  inline bool empty() const { return (w == 0); }
+  inline bool empty() const { return (w == 0 && size == 1); }
   /** \brief save this entry */
   void SaveEntry(bool save_aux, dmlc::Stream* fo) const {
     fo->Write(&size, sizeof(size));
@@ -105,7 +105,7 @@ class SGDUpdater : public Updater {
     LOG(INFO) << "saved " << saved << " kv pairs";
   };
 
-  void Dump(bool dump_aux, bool need_reverse, dmlc::Stream *fo) const {
+  void Dump(bool dump_aux, bool need_reverse, dmlc::Stream *fo) const override {
     int64_t dumped = 0;
     dmlc::ostream os(fo);
     for (const auto& it : model_) {

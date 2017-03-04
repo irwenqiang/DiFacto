@@ -60,7 +60,6 @@ class KVStoreDist : public Store {
 
   virtual ~KVStoreDist() {
    if (IsWorker()) {
-     LOG(INFO) << "xigouworker";
      if (barrier_before_exit_) Barrier();
    }
    if (ps_worker_) {delete ps_worker_; ps_worker_ = nullptr;}

@@ -78,7 +78,7 @@ class Tracker {
    */
   virtual void Issue(const std::vector<std::pair<int, std::string>>& jobs) = 0;
   /**
-   * \brief send jobs to nodes and wait them finished.
+   * \brief send a job to nodes and wait it finished.
    */
   virtual void IssueAndWait(int node_id, std::string args) = 0;
   /**

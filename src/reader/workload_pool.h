@@ -12,12 +12,12 @@ namespace difacto {
 /*! brief workload pool paramenters */
 struct WorkloadPoolParam : public dmlc::Parameter<WorkloadPoolParam> {
   bool shuffle;
-  double timeout;
+  double straggler_timeout;
   DMLC_DECLARE_PARAMETER(WorkloadPoolParam) {
     // declare parameters
     DMLC_DECLARE_FIELD(shuffle).set_default(true)
         .describe("whether use data shuffle in Workload pool");
-    DMLC_DECLARE_FIELD(timeout).set_range(0, 99999).set_default(0)
+    DMLC_DECLARE_FIELD(straggler_timeout).set_range(0, 99999).set_default(0)
         .describe("timeout for Straggler in msec");
   }
 };
@@ -38,7 +38,7 @@ class WorkloadPool {
 
   KWArgs Init(const KWArgs& kwargs) {
     auto remain = wpparam.InitAllowUnknown(kwargs);
-    if (wpparam.timeout) {
+    if (wpparam.straggler_timeout) {
       straggler_killer_ = new std::thread([this]() {
         while (!done_) {
           // detecter straggler for every 2 second
@@ -162,7 +162,7 @@ class WorkloadPool {
     auto it = assigned_.begin();
     while (it != assigned_.end()) {
       double t = cur_t - it->start;
-      if (t > std::max(mean * 10, wpparam.timeout)) {
+      if (t > std::max(mean * 10, wpparam.straggler_timeout)) {
         LOG(INFO) << it->node << " is processing "
                   << it->DebugStr() << " for " << t
                   << " sec, which is much longer than the average time "

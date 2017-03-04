@@ -30,13 +30,15 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
   std::string loss;
   /** \brief the maximal number of data passes */
   int max_num_epochs;
+  /** \brief the epoch of model_in */
   int load_epoch;
-  /**
-   * \brief the minibatch size
-   */
+  /** \brief the minibatch size */
   int batch_size;
   int shuffle;
   float neg_sampling;
+
+  std::string pred_out;
+  bool pred_prob;
 
   /** \brief issue num_jobs_per_epoch * num_workers per epoch */
   int num_jobs_per_epoch;
@@ -51,7 +53,7 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
   bool has_aux;
   DMLC_DECLARE_PARAMETER(SGDLearnerParam) {
     DMLC_DECLARE_FIELD(data_format).set_default("libsvm");
-    DMLC_DECLARE_FIELD(data_in);
+    DMLC_DECLARE_FIELD(data_in).set_default("");
     DMLC_DECLARE_FIELD(data_val).set_default("");
     DMLC_DECLARE_FIELD(model_out).set_default("");
     DMLC_DECLARE_FIELD(model_in).set_default("");
@@ -61,7 +63,10 @@ struct SGDLearnerParam : public dmlc::Parameter<SGDLearnerParam> {
     DMLC_DECLARE_FIELD(num_jobs_per_epoch).set_default(10);
     DMLC_DECLARE_FIELD(batch_size).set_default(100);
     DMLC_DECLARE_FIELD(shuffle).set_default(10);
+    DMLC_DECLARE_FIELD(pred_out).set_default("");
+    DMLC_DECLARE_FIELD(pred_prob).set_default(true);
     DMLC_DECLARE_FIELD(neg_sampling).set_default(1);
+    DMLC_DECLARE_FIELD(report_interval).set_default(1);
     DMLC_DECLARE_FIELD(stop_rel_objv).set_default(1e-5);
     DMLC_DECLARE_FIELD(stop_val_auc).set_default(1e-5);
     DMLC_DECLARE_FIELD(has_aux).set_default(false);
@@ -94,6 +99,8 @@ struct SGDUpdaterParam : public dmlc::Parameter<SGDUpdaterParam> {
   int V_dim;
   /** \brief the minimal feature count for allocating V */
   int V_threshold;
+  /** \brief whether use ZF for V means if w=0 V then V=0 */
+  bool l1_shrk;
   /** \brief random seed */
   unsigned int seed;
   DMLC_DECLARE_PARAMETER(SGDUpdaterParam) {
@@ -107,6 +114,7 @@ struct SGDUpdaterParam : public dmlc::Parameter<SGDUpdaterParam> {
     DMLC_DECLARE_FIELD(V_init_scale).set_range(0, 10).set_default(.01);
     DMLC_DECLARE_FIELD(V_threshold).set_default(10);
     DMLC_DECLARE_FIELD(V_dim).set_default(0);
+    DMLC_DECLARE_FIELD(l1_shrk).set_default(true);
     DMLC_DECLARE_FIELD(seed).set_default(0);
   }
 };

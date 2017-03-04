@@ -28,7 +28,7 @@ class ArgParser {
     KWArgs kwargs;
     for (auto it : *conf) {
       kwargs.push_back(it);
-      LOG(INFO) << it.first <<" " << it.second;
+      LOG(INFO) << it.first <<": " << it.second;
     }
     delete conf;
     return kwargs;

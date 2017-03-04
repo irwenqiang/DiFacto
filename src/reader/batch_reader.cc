@@ -22,9 +22,7 @@ BatchReader::BatchReader(
     reader_ = NULL;
   } else {
     buf_reader_ = NULL;
-    std::vector<std::string> files;
-    MatchFile(uri, &files);
-    reader_ = new Reader(files[0].c_str(), format, part_index, num_parts, 1<<26);
+    reader_ = new Reader(uri, format, part_index, num_parts, 1<<26);
   }
 }
 

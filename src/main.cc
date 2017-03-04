@@ -53,7 +53,7 @@ DMLC_REGISTER_PARAMETER(DumpParam);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
-    LOG(ERROR) << "usage: difacto key1=val1 key2=val2 ...";
+    LOG(ERROR) << "usage: difacto config_file key1=val1 key2=val2 ...";
     return 0;
   }
   using namespace difacto;

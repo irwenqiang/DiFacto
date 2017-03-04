@@ -26,8 +26,6 @@ class SGDLearner : public Learner {
   }
 
   virtual ~SGDLearner() {
-    LOG(INFO) <<"Xigou LEARNER";
-    LOG(INFO) <<"mytime " << lc_time_ <<" " << pull_time_ <<" " <<grad_time_  <<" "<< push_time_;
     delete loss_;
     delete store_;
     delete reporter_;
@@ -60,11 +58,28 @@ class SGDLearner : public Learner {
     tracker_->IssueAndWait(NodeID::kServerGroup, job_str);
   }
 
-  /** \brief get the saved model name only for server */
+  /** \brief get the saved model name only for servers */
   inline std::string ModelName(const std::string& prefix, int iter) {
     std::string name = prefix;
     if (iter >= 0) name += "_iter-" + std::to_string(iter);
     return name + "_part-" + std::to_string(store_->Rank());
+  }
+
+  /** \brief save prediction to files only for workers */
+  inline void SavePred(const SArray<real_t>& pred,
+                       dmlc::real_t const* label = nullptr) const{
+    std::string pred_name = param_.pred_out + "_part-" + std::to_string(store_->Rank());
+    std::unique_ptr<dmlc::Stream> fo(
+          dmlc::Stream::Create(pred_name.c_str(), "w"));
+    dmlc::ostream os(fo.get());
+    for (size_t i = 0; i < pred.size(); ++i) {
+      if (label) os << label[i] << "\t";
+      if(param_.pred_prob) {
+        os << 1.0 / (1.0 + exp( - pred[i] )) << "\n";
+      } else {
+        os << pred[i] << "\n";
+      }
+    }
   }
 
   /**
@@ -107,10 +122,6 @@ class SGDLearner : public Learner {
   double start_time_;
   bool do_embedding_ = false;
 
-  double lc_time_ = 0;
-  double pull_time_ = 0;
-  double push_time_ = 0;
-  double grad_time_ = 0;
   std::vector<std::function<void(int epoch, const sgd::Progress& train,
                                  const sgd::Progress& val)>> epoch_end_callback_;
 };

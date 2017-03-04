@@ -18,7 +18,8 @@ struct Job {
   static const int kSaveModel = 2;
   static const int kTraining = 3;
   static const int kValidation = 4;
-  static const int kEvaluation = 5;
+  static const int kPrediction = 5;
+  static const int kEvaluation = 6;
   /** \brief job type */
   int type;
   /** \brief number of partitions of this file */
@@ -49,11 +50,11 @@ struct Job {
 };
 
 struct Progress {
-  real_t loss = 0;  //
-  real_t penalty = 0;  //
-  real_t auc = 0;   // auc
-  real_t nnz_w = 0;  // |w|_0
   real_t nrows = 0;  // number of examples
+  real_t loss = 0;  //
+  real_t auc = 0;   // auc
+  real_t penalty = 0;  //
+  real_t nnz_w = 0;  // |w|_0
 
   std::string TextString() {
     std::stringstream ss;

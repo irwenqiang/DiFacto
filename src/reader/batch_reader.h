@@ -8,7 +8,6 @@
 #include "difacto/base.h"
 #include "dmlc/data.h"
 #include "./reader.h"
-#include "./match_file.h"
 namespace difacto {
 
 /**

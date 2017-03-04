@@ -82,7 +82,6 @@ class Loss {
     nthreads_ = nthreads;
   }
 
-
   int nthreads_;
 };
 }  // namespace difacto

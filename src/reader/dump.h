@@ -10,6 +10,8 @@
 namespace difacto {
 
 struct DumpParam : public dmlc::Parameter<DumpParam> {
+  /** \brief name of updater */
+  std::string updater;
   /** \brief the model file to dump */
   std::string model_in;
   /** \brief the dump file name */
@@ -20,6 +22,7 @@ struct DumpParam : public dmlc::Parameter<DumpParam> {
   bool dump_aux;
   
   DMLC_DECLARE_PARAMETER(DumpParam) {
+    DMLC_DECLARE_FIELD(updater).set_default("sgd");
     DMLC_DECLARE_FIELD(model_in).set_default("");
     DMLC_DECLARE_FIELD(name_dump).set_default("dump.txt");
     DMLC_DECLARE_FIELD(need_reverse).set_default(false);
@@ -43,19 +46,25 @@ class Dump {
       return;
     }
 
-    SGDUpdater updater;
+    if (param_.updater == "sgd"){
+      updater_ = std::shared_ptr<Updater>(new SGDUpdater());
+    } else {
+      LOG(FATAL) << "Unkonwn updater: " << param_.updater;
+    }
+
     std::unique_ptr<dmlc::Stream> fi(
             dmlc::Stream::Create(param_.model_in.c_str(), "r"));
-    updater.Load(fi.get());
+    updater_->Load(fi.get());
 
     // dump model
     std::unique_ptr<dmlc::Stream> fo(
             dmlc::Stream::Create(param_.name_dump.c_str(), "w"));
-    updater.Dump(param_.dump_aux, param_.need_reverse, fo.get());
+    updater_->Dump(param_.dump_aux, param_.need_reverse, fo.get());
   }
 
  private:
   DumpParam param_;
+  std::shared_ptr<Updater> updater_;
 };
 
 }  // namespace difacto

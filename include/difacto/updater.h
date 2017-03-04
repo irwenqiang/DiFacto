@@ -44,6 +44,15 @@ class Updater {
    * \param fo output stream
    */
   virtual void Save(bool save_aux, dmlc::Stream *fo) const = 0;
+
+  /** 
+   * \brief dump model to readable format
+   * \param dump_aux whether or not dump aux data
+   * \param need_reverse whether or not reverse feature id
+   * \param fo output stream
+   */
+  virtual void Dump(bool dump_aux, bool need_reverse, dmlc::Stream *fo) const = 0;
+
   /**
    * \brief get the weights on the given features
    *

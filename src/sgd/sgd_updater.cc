@@ -39,14 +39,14 @@ void SGDUpdater::Get(const SArray<feaid_t>& fea_ids,
   int V_dim = param_.V_dim;
   size_t size = fea_ids.size();
   weights->resize(size * (1 + V_dim));
-  lens->resize(V_dim == 0 ? 0 : size);
+  if (lens) lens->resize(V_dim == 0 ? 0 : size);
   int p = 0;
   for (size_t i = 0; i < size; ++i) {
     //mu_.lock();
     auto& e = model_[fea_ids[i]];
     //mu_.unlock();
     (*weights)[p++] = e.w;
-    if (e.V) {
+    if (e.V && !(param_.l1_shrk && (e.w == 0))) {
       memcpy(weights->data()+p, e.V, V_dim*sizeof(real_t));
       p += V_dim;
       (*lens)[i] = V_dim + 1;

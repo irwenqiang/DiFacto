@@ -57,7 +57,7 @@ void SGDLearner::RunScheduler() {
   int k = 0;
   start_time_ = dmlc::GetTime();
 
-  // load model for incremental learning
+  // load model
   if (param_.model_in.size()) {
     if (param_.load_epoch > 0) {
       LOG(INFO) << "Loading model from epoch " << param_.load_epoch;
@@ -67,6 +67,16 @@ void SGDLearner::RunScheduler() {
       LOG(INFO) << "loading lastest model...";
       SaveLoadModel(sgd::Job::kLoadModel);
     }
+  }
+
+  if (0) {
+    CHECK(param_.model_in.size()) << "Prediction needs model_in";
+    sgd::Progress pred_prog;
+    LOG(INFO) << "Start predicting...";
+    RunEpoch(k, sgd::Job::kPrediction, &pred_prog);
+    LOG(INFO) << "Prediction: " << pred_prog.TextString();
+    Stop();
+    return;
   }
 
   for (; k < param_.max_num_epochs; ++k) {
@@ -133,9 +143,11 @@ void SGDLearner::RunEpoch(int epoch, int job_type, sgd::Progress* prog) {
 
   // wait and report
   while (tracker_->NumRemains()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    printf("%5.0lf  %s\n", dmlc::GetTime() - start_time_, report_prog_.PrintStr().c_str());
-    fflush(stdout);
+    std::this_thread::sleep_for(std::chrono::milliseconds(param_.report_interval * 1000));
+    if (job_type == sgd::Job::kTraining) {
+      printf("%5.0lf  %s\n", dmlc::GetTime() - start_time_, report_prog_.PrintStr().c_str());
+      fflush(stdout);
+    }
   }
 }
 
@@ -162,7 +174,8 @@ void SGDLearner::Process(const std::string& args, std::string* rets) {
   Job job; job.ParseFromString(args);
   switch(job.type) {
     case Job::kTraining:
-    case Job::kValidation: {
+    case Job::kValidation:
+    case Job::kPrediction: {
       IterateData(job, &prog);
       break;
     }
@@ -194,18 +207,13 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
       [this, progress](const BatchJob& batch,
                        const std::function<void()>& on_complete,
                        std::string* rets) {
-        double start = dmlc::GetTime();
         // use potiners here in order to copy into the callback
         SArray<real_t>* values = new SArray<real_t>();
         SArray<int>* lengths = do_embedding_ ? new SArray<int>() : nullptr;
-        auto pull_callback = [this, start, batch, values, lengths, progress, on_complete]() {
-          pull_time_ += dmlc::GetTime() - start;
-          double start1 = dmlc::GetTime();
+        auto pull_callback = [this, batch, values, lengths, progress, on_complete]() {
           // eval loss
-          sgd::Progress report_prog;
           auto data = batch.data.GetBlock();
           progress->nrows += data.size;
-          report_prog.nrows = data.size;
           SArray<real_t> pred(data.size);
           SArray<int> w_pos, V_pos;
           if (lengths) GetPos(*lengths, &w_pos, &V_pos);
@@ -214,7 +222,6 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
           CHECK_NOTNULL(loss_)->Predict(data, inputs, &pred);
           auto loss = loss_->Evaluate(batch.data.label.data(), pred);
           progress->loss += loss;
-          report_prog.loss = loss;
           // eval penalty
           //progress->penalty += EvaluatePenalty(*values, w_pos, V_pos);
 
@@ -223,30 +230,33 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
                                 pred.size(), blk_nthreads_);
           auto auc = metric.AUC();
           progress->auc += auc;
-          report_prog.auc = auc;
 
-          // report progress to SCH
-          std::string rets;
-          report_prog.SerializeToString(&rets);
-          reporter_->Report(rets);
+          if (batch.type == sgd::Job::kPrediction && param_.pred_out.size()) {
+            SavePred(pred, batch.data.label.data());
+          }
 
           // calculate the gradients
           if (batch.type == sgd::Job::kTraining) {
+            // report progress to SCH first
+            sgd::Progress report_prog; std::string rets;
+            report_prog.nrows = data.size;
+            report_prog.loss = loss; report_prog.auc = auc;
+            report_prog.SerializeToString(&rets);
+            reporter_->Report(rets);
+
             SArray<real_t> grads(values->size());
             inputs.push_back(SArray<char>(pred));
             loss_->CalcGrad(data, inputs, &grads);
-            grad_time_ += dmlc::GetTime()-start1;
 
             // push the gradient, this task is done only if the push is complete
-            double start2 = dmlc::GetTime();
             SArray<int> len = {};
             store_->Push(batch.feaids,
                          Store::kGradient,
                          grads,
                          lengths ? *lengths : len,
-                         [this, on_complete, start2]() { on_complete(); push_time_ += dmlc::GetTime()-start2; });
+                         [this, on_complete]() { on_complete(); });
           } else {
-            // a validation job
+            // a validation/prediction job
             on_complete();
           }
           if (values) delete values;
@@ -279,10 +289,8 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
     auto data = new dmlc::data::RowBlockContainer<unsigned>();
     auto feaids = std::make_shared<std::vector<feaid_t>>();
     auto feacnt = std::make_shared<std::vector<real_t>>();
-    double start = dmlc::GetTime();
     Localizer lc(-1, blk_nthreads_);
     lc.Compact(reader->Value(), data, feaids.get(), push_cnt ? feacnt.get() : nullptr);
-    lc_time_ += dmlc::GetTime() - start;
 
     // save results into batch
     BatchJob batch;

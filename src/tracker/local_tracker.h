@@ -7,7 +7,10 @@
 #include <utility>
 #include <string>
 #include "difacto/tracker.h"
+#include "difacto/node_id.h"
+#include "sgd/sgd_utils.h"
 #include "./async_local_tracker.h"
+
 namespace difacto {
 /**
  * \brief an implementation of the tracker which only runs within a local
@@ -35,7 +38,19 @@ class LocalTracker : public Tracker {
     tracker_->Wait(0);
   };
 
-  void StartDispatch(int num_jobs_per_epoch, int job_type, int epoch) {};
+  void StartDispatch(int num_parts, int job_type, int epoch) {
+    std::vector<std::pair<int, std::string>> jobs(num_parts);
+    for (int i = 0; i < num_parts; ++i) {
+      jobs[i].first = NodeID::kWorkerGroup;
+      sgd::Job job;
+      job.type = job_type;
+      job.epoch = epoch;
+      job.num_parts = num_parts;
+      job.part_idx = i;
+      job.SerializeToString(&jobs[i].second);
+    }
+    Issue(jobs);
+  };
 
   int NumRemains() override {
     return CHECK_NOTNULL(tracker_)->NumRemains();
