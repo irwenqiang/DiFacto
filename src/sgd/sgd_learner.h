@@ -28,7 +28,9 @@ class SGDLearner : public Learner {
   virtual ~SGDLearner() {
     delete loss_;
     delete store_;
-    delete reporter_;
+    // reporter_ was deleted by shared_ptr
+    // see Init()
+    //delete reporter_;
   }
   KWArgs Init(const KWArgs& kwargs) override;
 

@@ -138,22 +138,14 @@ class SGDUpdater : public Updater {
     LOG(INFO) << "dumped " << dumped << " kv pairs";
   };
 
-  void SetReporter(const std::function<int(const std::string& prog)>& reporter) {
-    CHECK(reporter);
-    reporter_ = reporter;
+  std::string Get_report() override {
+    sgd::Progress report_prog; report_prog.nnz_w = new_w;
+    std::string rets;
+    report_prog.SerializeToString(&rets);
+    new_w = 0;
+    return rets;
   };
-
-  void Report() override{
-    ++ ct_;
-    if (ct_ > 50) {
-      sgd::Progress report_prog; report_prog.nnz_w = new_w;
-      std::string rets;
-      report_prog.SerializeToString(&rets);
-      reporter_(rets);
-      new_w = 0; ct_ = 0;
-    }
-  };
-
+  
   void Get(const SArray<feaid_t>& fea_ids,
            int value_type,
            SArray<real_t>* weights,
@@ -183,10 +175,8 @@ class SGDUpdater : public Updater {
   float new_w = 0;
 
   SGDUpdaterParam param_;
-  std::function<int(const std::string& prog)> reporter_;
   std::unordered_map<feaid_t, SGDEntry> model_;
   mutable std::mutex mu_;
-  int ct_ = 0;
 };
 
 

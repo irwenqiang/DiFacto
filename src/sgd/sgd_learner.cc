@@ -34,16 +34,13 @@ KWArgs SGDLearner::Init(const KWArgs& kwargs) {
   // init updater
   auto updater = new SGDUpdater();
   remain = updater->Init(remain);
-  updater->SetReporter(
-      [this](const std::string& prog)->int {
-       return reporter_->Report(prog);
-      });
   remain.push_back(std::make_pair("V_dim", std::to_string(updater->param().V_dim)));
   // init do embedding
   if (updater->param().V_dim > 0) do_embedding_ = true;
   // init store
   store_ = Store::Create();
   store_->SetUpdater(std::shared_ptr<Updater>(updater));
+  store_->SetReporter(std::shared_ptr<Reporter>(reporter_));
   remain = store_->Init(remain);
   // init loss
   loss_ = Loss::Create(param_.loss, blk_nthreads_);
@@ -268,6 +265,7 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
 
   Reader* reader = nullptr;
   bool push_cnt = job.type == sgd::Job::kTraining && job.epoch == 0 && do_embedding_;
+  push_cnt=false;
 
   if (job.type == sgd::Job::kTraining) {
     reader = new BatchReader(param_.data_in,

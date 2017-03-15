@@ -76,8 +76,8 @@ class Updater {
                       const SArray<real_t>& data,
                       const SArray<int>& data_offset) = 0;
 
-  /** \brief report weight info to scheduler */
-  virtual void Report() = 0;
+  /** \brief get report info of weight */
+  virtual std::string Get_report() = 0;
  };
 
 }  // namespace difacto

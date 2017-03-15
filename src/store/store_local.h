@@ -29,7 +29,7 @@ class StoreLocal : public Store {
     SArray<real_t> vals_copy; vals_copy.CopyFrom(vals);
     SArray<int> lens_copy; lens_copy.CopyFrom(lens);
     updater_->Update(fea_ids, val_type, vals_copy, lens_copy);
-    updater_->Report();
+    Report();
     if (on_complete) on_complete();
     return time_++;
   }

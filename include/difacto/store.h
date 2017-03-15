@@ -12,6 +12,7 @@
 #include "dmlc/parameter.h"
 #include "./sarray.h"
 #include "./updater.h"
+#include "./reporter.h"
 namespace difacto {
 
 /**
@@ -93,14 +94,33 @@ class Store {
    * \brief return the rank of this node
    */
   virtual int Rank() = 0;
-
-  /** \brief set an updater for the store, only required for a server node */
+  /**
+   * \brief set an updater for the store, only required for a server node
+   */
   virtual void SetUpdater(const std::shared_ptr<Updater>& updater) {
+    CHECK(updater);
     updater_ = updater;
   }
-  /** \brief get the updater */
+  /**
+   * \brief get the updater
+  */
   std::shared_ptr<Updater> updater() { return updater_; }
-
+  /** 
+   * \brief set the reporter function only for a server node
+   */
+  void SetReporter(const std::shared_ptr<Reporter>& reporter) {
+    CHECK(reporter);
+    reporter_ = reporter;
+  };
+  /**
+   * \brief default reporter to the scheduler for a server node
+   */
+  inline void Report() {
+    if (reporter_ && updater_ && ++ct_ > 50) {
+      reporter_->Report(updater_->Get_report());
+      ct_ = 0;
+    }
+  }
 
   /******************************************************
    * the following are used for multi-machines.
@@ -130,14 +150,16 @@ class Store {
   std::shared_ptr<Updater> updater_;
 
   /**
-   * \brief the kvstore type BSP SSP TAP
+   * \brief the reporter function
    */
-  std::string type_;
+  std::shared_ptr<Reporter> reporter_;
 
   /**
    * \brief whether to do barrier when finalize
    */
   std::atomic<bool> barrier_before_exit_{true};
+
+  int ct_ = 0;
 };
 
 }  // namespace difacto
