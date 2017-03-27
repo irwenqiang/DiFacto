@@ -68,8 +68,10 @@ int main(int argc, char *argv[]) {
   // run task
   switch (param.task) {
     case kTrain:
+    case kPredict:
       {
       Learner* learner = Learner::Create(param.learner);
+      kwargs_remain.push_back(std::make_pair("task", std::to_string(param.task)));
       WarnUnknownKWArgs(param, learner->Init(kwargs_remain));
       LOG(INFO) << "start run learner";
       learner->Run();
@@ -82,9 +84,6 @@ int main(int argc, char *argv[]) {
       WarnUnknownKWArgs(param, dumper.Init(kwargs_remain));
       dumper.Run();
       }
-      break;
-    case kPredict:
-      LOG(FATAL) << "TODO";
       break;
     case kConvert:
       {

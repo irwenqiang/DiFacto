@@ -66,7 +66,7 @@ void SGDLearner::RunScheduler() {
     }
   }
 
-  if (0) {
+  if (param_.task == 2) {
     CHECK(param_.model_in.size()) << "Prediction needs model_in";
     sgd::Progress pred_prog;
     LOG(INFO) << "Start predicting...";
@@ -265,7 +265,6 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
 
   Reader* reader = nullptr;
   bool push_cnt = job.type == sgd::Job::kTraining && job.epoch == 0 && do_embedding_;
-  push_cnt=false;
 
   if (job.type == sgd::Job::kTraining) {
     reader = new BatchReader(param_.data_in,
