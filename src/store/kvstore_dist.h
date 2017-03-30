@@ -131,34 +131,12 @@ class KVStoreDist : public Store {
                   ps::KVServer<real_t>* server) {
     CHECK_GT(req_data.keys.size(), (size_t)0) << "req_data must has keys";
     CHECK(updater_);
-    int sender_rank = ps::Postoffice::Get()->IDtoRank(req_meta.sender);
     if (req_meta.push) {
       CHECK_GT(req_data.vals.size(), (size_t)0) << "pushed req_data must has vals";
  
       if (kvparam.sync_mode) {
         // synced push SSP BSP
-        if (worker_pull_clocks_->local_clock(sender_rank) >
-            worker_pull_clocks_->global_clock()) {
-          MsgBuf msg;
-          msg.data.keys.CopyFrom(req_data.keys);
-          msg.data.vals.CopyFrom(req_data.vals);
-          msg.request = req_meta;
-          msg_push_buf_.Push(msg);
-          ++num_waited_push_[sender_rank];
-          return;
-        }
-        // process push
-        HandlePush(req_meta, req_data, server);
-        if (worker_push_clocks_->Update(sender_rank)) {
-          CHECK(msg_push_buf_.Empty());
-          while (!msg_pull_buf_.Empty()) {
-            MsgBuf msg;
-            CHECK(msg_pull_buf_.TryPop(msg));
-            HandlePull(msg.request, msg.data, server);
-            int rank = ps::Postoffice::Get()->IDtoRank(msg.request.sender);
-            CHECK(!worker_pull_clocks_->Update(rank));
-          }
-        }
+        LOG(FATAL) << "SSP BSP TODO";
       } else {
         // async push
         HandlePush(req_meta, req_data, server);
@@ -166,27 +144,7 @@ class KVStoreDist : public Store {
     } else {
       if (kvparam.sync_mode) {
         // synced pull SSP BSP
-        if (worker_push_clocks_->local_clock(sender_rank) >
-            worker_push_clocks_->global_clock() ||
-            num_waited_push_[sender_rank] > 0) {
-          MsgBuf msg;
-          msg.data.keys.CopyFrom(req_data.keys);
-          msg.data.vals.CopyFrom(req_data.vals);
-          msg.request = req_meta;
-          msg_pull_buf_.Push(msg);
-          return;
-        }
-        HandlePull(req_meta, req_data, server);
-        if (worker_pull_clocks_->Update(sender_rank)) {
-          while (!msg_push_buf_.Empty()) {
-            MsgBuf msg;
-            CHECK(msg_push_buf_.TryPop(msg));
-            HandlePush(msg.request, msg.data, server);
-            int rank = ps::Postoffice::Get()->IDtoRank(msg.request.sender);
-            CHECK(!worker_push_clocks_->Update(rank));
-            --num_waited_push_[rank];
-          }
-        }
+        LOG(FATAL) << "SSP BSP TODO";
       } else {
         // async pull
         HandlePull(req_meta, req_data, server);

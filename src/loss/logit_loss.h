@@ -91,7 +91,11 @@ class LogitLoss : public Loss {
 #pragma omp parallel for num_threads(nthreads_)
     for (size_t i = 0; i < p.size(); ++i) {
       real_t y = data.label[i] > 0 ? 1 : -1;
-      p[i] = - y / (1 + std::exp(y * p[i]));
+      if (data.weight) {
+        p[i] = - y / (1 + std::exp(y * p[i])) * data.weight[i];
+      } else {
+        p[i] = - y / (1 + std::exp(y * p[i]));
+      }
     }
 
     // grad += ...

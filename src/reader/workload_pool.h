@@ -11,11 +11,11 @@ namespace difacto {
 
 /*! brief workload pool paramenters */
 struct WorkloadPoolParam : public dmlc::Parameter<WorkloadPoolParam> {
-  bool shuffle;
+  bool wl_shuffle;
   double straggler_timeout;
   DMLC_DECLARE_PARAMETER(WorkloadPoolParam) {
     // declare parameters
-    DMLC_DECLARE_FIELD(shuffle).set_default(true)
+    DMLC_DECLARE_FIELD(wl_shuffle).set_default(true)
         .describe("whether use data shuffle in Workload pool");
     DMLC_DECLARE_FIELD(straggler_timeout).set_range(0, 99999).set_default(0)
         .describe("timeout for Straggler in msec");
@@ -123,7 +123,7 @@ class WorkloadPool {
 
   int GetOne(const int id) {
     int pick = 0, i = 0;
-    if (wpparam.shuffle) {
+    if (wpparam.wl_shuffle) {
       int n = 0;
       for (auto& it : track_) {
         auto& t = it.second;

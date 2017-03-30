@@ -295,7 +295,6 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
     batch.feaids = SArray<feaid_t>(feaids);
     batch.data = SharedRowBlockContainer<unsigned>(&data);
     delete data;
-
     // push feature count into the servers
     if (push_cnt) {
       store_->Wait(store_->Push(

@@ -81,7 +81,7 @@ void BatchReader::Push(size_t pos, size_t len) {
   if (!len) return;
   CHECK_LE(pos + len, in_blk_.size);
   dmlc::RowBlock<feaid_t> slice;
-  slice.weight = NULL;
+  slice.field = NULL;
   slice.size = len;
   slice.offset  = in_blk_.offset + pos;
   slice.label   = in_blk_.label  + pos;
@@ -90,6 +90,11 @@ void BatchReader::Push(size_t pos, size_t len) {
     slice.value = in_blk_.value  + in_blk_.offset[pos];
   } else {
     slice.value = NULL;
+  }
+  if (in_blk_.weight) {
+    slice.weight = in_blk_.weight + in_blk_.offset[pos];
+  } else {
+    slice.weight = NULL;
   }
   batch_.Push(slice);
 }
