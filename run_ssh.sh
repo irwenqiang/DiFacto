@@ -1,1 +1,1 @@
-python launch.py -n 20 -s 5 --launcher ssh -H ip_list.txt --sync-dst-dir Difacto222 build/difacto local.conf 
+python launch.py -n 2 -s 1 --launcher ssh -H example/ip_list.txt --sync-dst-dir Difacto_ssh build/difacto example/local.conf 

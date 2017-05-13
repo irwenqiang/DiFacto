@@ -21,7 +21,7 @@ and train FM with 2-dimension on it.
 git clone --recursive https://github.com/dmlc/difacto
 cd difacto; git submodule update --init; make -j8
 ./tools/download.sh gisette
-build/difacto data_in=data/gisette_scale val_data=data/gisette_scale.t lr=.02 V_dim=2 V_lr=.001
+build/difacto xx.conf data_in=data/gisette_scale val_data=data/gisette_scale.t lr=.02 V_dim=2 V_lr=.001
 ```
 
 ### History
@@ -29,7 +29,6 @@ build/difacto data_in=data/gisette_scale val_data=data/gisette_scale.t lr=.02 V_
 Origins from
 [wormhole/learn/difacto](https://github.com/dmlc/wormhole/tree/master/learn/difacto).
 
-(NOTE: this project is still under developing)
 
 ### References
 

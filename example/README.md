@@ -1,9 +1,7 @@
 # Examples
 
-This fold contains example configurations, which can be passed by
-`argfile=`. For example,
+This fold contains example configurations, which can be used by script `run_local.sh` `run_yarn.sh`  
 
 ```bash
-tools/download.sh criteo
-build/difacto argfile=example/criteo_lbfgs.conf
+build/difacto local.conf key1=value1 key2=value2
 ```
