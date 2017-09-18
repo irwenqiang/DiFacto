@@ -21,7 +21,7 @@ and train FM with 2-dimension on it.
 git clone --recursive https://github.com/CNevd/DiFacto
 cd DiFacto; make -j8
 ./tools/download.sh gisette
-build/difacto xx.conf data_in=data/gisette_scale val_data=data/gisette_scale.t lr=.02 V_dim=2 V_lr=.001
+build/difacto xx.conf data_in=data/gisette_scale data_val=data/gisette_scale.t lr=.02 V_dim=2 V_lr=.001
 ```
 
 
