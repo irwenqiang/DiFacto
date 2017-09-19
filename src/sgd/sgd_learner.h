@@ -26,9 +26,12 @@ class SGDLearner : public Learner {
   }
 
   virtual ~SGDLearner() {
-    delete loss_;
-    delete store_;
-    delete fo_;
+    if (loss_ != nullptr)
+       delete loss_;
+    if (store_ != nullptr)
+       delete store_;
+    if (fo_ != nullptr)
+       delete fo_;
     // reporter_ was deleted by shared_ptr
     // see Init()
     //delete reporter_;
