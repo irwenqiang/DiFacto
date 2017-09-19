@@ -50,7 +50,7 @@ KWArgs SGDLearner::Init(const KWArgs& kwargs) {
   fo_ = dmlc::Stream::Create(pred_name.c_str(), "w");
   return remain;
 }
-
+  
 void SGDLearner::RunScheduler() { 
   real_t pre_loss = 0, pre_val_auc = 0;
   int k = 0;
@@ -184,4 +184,159 @@ void SGDLearner::Process(const std::string& args, std::string* rets) {
     }
     case Job::kLoadModel: {
       std::string filename = ModelName(param_.model_in, job.epoch);
-      std::unique_ptr<dmlc::Str
+      std::unique_ptr<dmlc::Stream> fi(
+          dmlc::Stream::Create(filename.c_str(), "r"));
+      GetUpdater()->Load(fi.get());
+      break;
+    }
+    case Job::kSaveModel: {
+      std::string filename = ModelName(param_.model_out, job.epoch);
+      std::unique_ptr<dmlc::Stream> fo(
+          dmlc::Stream::Create(filename.c_str(), "w"));
+      GetUpdater()->Save(param_.has_aux, fo.get());
+      break;
+    }
+  }
+  prog.SerializeToString(rets);
+}
+
+void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
+  AsyncLocalTracker<BatchJob> batch_tracker;
+  batch_tracker.SetExecutor(
+      [this, progress](const BatchJob& batch,
+                       const std::function<void()>& on_complete,
+                       std::string* rets) {
+        // use potiners here in order to copy into the callback
+        SArray<real_t>* values = new SArray<real_t>();
+        SArray<int>* lengths = do_embedding_ ? new SArray<int>() : nullptr;
+        auto pull_callback = [this, batch, values, lengths, progress, on_complete]() {
+          // eval loss
+          auto data = batch.data.GetBlock();
+          progress->nrows += data.size;
+          SArray<real_t> pred(data.size);
+          SArray<int> w_pos, V_pos;
+          if (lengths) GetPos(*lengths, &w_pos, &V_pos);
+          std::vector<SArray<char>> inputs = {
+            SArray<char>(*values), SArray<char>(w_pos), SArray<char>(V_pos)};
+          CHECK_NOTNULL(loss_)->Predict(data, inputs, &pred);
+          auto loss = loss_->Evaluate(batch.data.label.data(), pred);
+          progress->loss += loss;
+          // eval penalty
+          //progress->penalty += EvaluatePenalty(*values, w_pos, V_pos);
+
+          // auc, ...
+          BinClassMetric metric(batch.data.label.data(), pred.data(),
+                                pred.size(), blk_nthreads_);
+          auto auc = metric.AUC();
+          progress->auc += auc;
+
+          if (batch.type == sgd::Job::kPrediction && param_.pred_out.size()) {
+            SavePred(pred, batch.data.label.data());
+          }
+
+          // calculate the gradients
+          if (batch.type == sgd::Job::kTraining) {
+            // report progress to SCH first
+            sgd::Progress report_prog; std::string rets;
+            report_prog.nrows = data.size;
+            report_prog.loss = loss; report_prog.auc = auc;
+            report_prog.SerializeToString(&rets);
+            reporter_->Report(rets);
+
+            SArray<real_t> grads(values->size());
+            inputs.push_back(SArray<char>(pred));
+            loss_->CalcGrad(data, inputs, &grads);
+
+            // push the gradient, this task is done only if the push is complete
+            SArray<int> len = {};
+            store_->Push(batch.feaids,
+                         Store::kGradient,
+                         grads,
+                         lengths ? *lengths : len,
+                         [this, on_complete]() { on_complete(); });
+          } else {
+            // a validation/prediction job
+            on_complete();
+          }
+          if (values) delete values;
+          if (lengths) delete lengths;
+        };
+        // pull the weight back
+        store_->Pull(batch.feaids, Store::kWeight, values, lengths, pull_callback);
+      });
+
+  Reader* reader = nullptr;
+  bool push_cnt = job.type == sgd::Job::kTraining && job.epoch == 0 && do_embedding_;
+
+  if (job.type == sgd::Job::kTraining) {
+    reader = new BatchReader(param_.data_in,
+                             param_.data_format,
+                             job.part_idx,
+                             job.num_parts,
+                             param_.batch_size,
+                             param_.batch_size * param_.shuffle,
+                             param_.neg_sampling);
+  } else {
+    reader = new Reader(param_.data_val,
+                        param_.data_format,
+                        job.part_idx,
+                        job.num_parts,
+                        256*1024*1024);
+  }
+  while (reader->Next()) {
+    // map feature id into continous index
+    auto data = new dmlc::data::RowBlockContainer<unsigned>();
+    auto feaids = std::make_shared<std::vector<feaid_t>>();
+    auto feacnt = std::make_shared<std::vector<real_t>>();
+    Localizer lc(-1, blk_nthreads_);
+    lc.Compact(reader->Value(), data, feaids.get(), push_cnt ? feacnt.get() : nullptr);
+
+    // save results into batch
+    BatchJob batch;
+    batch.type = job.type;
+    batch.feaids = SArray<feaid_t>(feaids);
+    batch.data = SharedRowBlockContainer<unsigned>(&data);
+    delete data;
+    // push feature count into the servers
+    if (push_cnt) {
+      store_->Wait(store_->Push(
+          batch.feaids, Store::kFeaCount, SArray<real_t>(feacnt), {}));
+    }
+
+    // avoid too many batches are processing in parallel
+    while (batch_tracker.NumRemains() > 1) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    batch_tracker.Issue({batch});
+  }
+  batch_tracker.Wait();
+  delete reader;
+}
+
+real_t SGDLearner::EvaluatePenalty(const SArray<real_t>& weights,
+                                   const SArray<int>& w_pos,
+                                   const SArray<int>& V_pos) {
+  real_t objv = 0;
+  auto param = GetUpdater()->param();
+  if (w_pos.size()) {
+    for (int p : w_pos) {
+      if (p == -1) continue;
+      real_t w = weights[p];
+      objv += param.l1 * fabs(w) + .5 * param.l2 * w * w;
+    }
+    for (int p : V_pos) {
+      if (p == -1) continue;
+      for (int i = 0; i < param.V_dim; ++i) {
+        real_t V = weights[p+i];
+        objv += .5 * param.V_l2 * V * V;
+      }
+    }
+  } else {
+    for (auto w : weights) {
+      objv += param.l1 * fabs(w) + .5 * param.l2 * w * w;
+    }
+  }
+  return objv;
+}
+
+}  // namespace difacto
