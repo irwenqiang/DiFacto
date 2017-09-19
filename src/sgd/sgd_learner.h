@@ -28,6 +28,7 @@ class SGDLearner : public Learner {
   virtual ~SGDLearner() {
     delete loss_;
     delete store_;
+    delete fo_;
     // reporter_ was deleted by shared_ptr
     // see Init()
     //delete reporter_;
@@ -68,12 +69,9 @@ class SGDLearner : public Learner {
   }
 
   /** \brief save prediction to files only for workers */
-  inline void SavePred(const SArray<real_t>& pred,
+  inline void SavePred(dmlc::Stream* fo, const SArray<real_t>& pred,
                        dmlc::real_t const* label = nullptr) const{
-    std::string pred_name = param_.pred_out + "_part-" + std::to_string(store_->Rank());
-    std::unique_ptr<dmlc::Stream> fo(
-          dmlc::Stream::Create(pred_name.c_str(), "w"));
-    dmlc::ostream os(fo.get());
+    dmlc::ostream os(fo);
     for (size_t i = 0; i < pred.size(); ++i) {
       if (label) os << label[i] << "\t";
       if(param_.pred_prob) {
@@ -123,7 +121,7 @@ class SGDLearner : public Learner {
   int blk_nthreads_ = DEFAULT_NTHREADS;
   double start_time_;
   bool do_embedding_ = false;
-
+  dmlc::Stream* fo_ = nullptr;
   std::vector<std::function<void(int epoch, const sgd::Progress& train,
                                  const sgd::Progress& val)>> epoch_end_callback_;
 };
