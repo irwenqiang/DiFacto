@@ -45,10 +45,12 @@ KWArgs SGDLearner::Init(const KWArgs& kwargs) {
   // init loss
   loss_ = Loss::Create(param_.loss, blk_nthreads_);
   remain = loss_->Init(remain);
-  
+  // init pred_out
+  std::string pred_name = param_.pred_out + "_part-" + std::to_string(store_->Rank());
+  fo_ = dmlc::Stream::Create(pred_name.c_str(), "w");
   return remain;
 }
-
+  
 void SGDLearner::RunScheduler() { 
   real_t pre_loss = 0, pre_val_auc = 0;
   int k = 0;
