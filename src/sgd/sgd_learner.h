@@ -69,9 +69,9 @@ class SGDLearner : public Learner {
   }
 
   /** \brief save prediction to files only for workers */
-  inline void SavePred(dmlc::Stream* fo, const SArray<real_t>& pred,
+  inline void SavePred(const SArray<real_t>& pred,
                        dmlc::real_t const* label = nullptr) const{
-    dmlc::ostream os(fo);
+    dmlc::ostream os(fo_);
     for (size_t i = 0; i < pred.size(); ++i) {
       if (label) os << label[i] << "\t";
       if(param_.pred_prob) {
