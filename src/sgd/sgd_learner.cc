@@ -45,9 +45,7 @@ KWArgs SGDLearner::Init(const KWArgs& kwargs) {
   // init loss
   loss_ = Loss::Create(param_.loss, blk_nthreads_);
   remain = loss_->Init(remain);
-  // init pred_out
-  std::string pred_name = param_.pred_out + "_part-" + std::to_string(store_->Rank());
-  fo_ = dmlc::Stream::Create(pred_name.c_str(), "w");
+  
   return remain;
 }
   
@@ -231,6 +229,11 @@ void SGDLearner::IterateData(const sgd::Job& job, sgd::Progress* progress) {
           progress->auc += auc;
 
           if (batch.type == sgd::Job::kPrediction && param_.pred_out.size()) {
+            if (!fo_pred_) {
+              // init pred_out
+              std::string pred_name = param_.pred_out + "_part-" + std::to_string(store_->Rank());
+              fo_pred_ = dmlc::Stream::Create(pred_name.c_str(), "w");
+            }
             SavePred(pred, batch.data.label.data());
           }
 
