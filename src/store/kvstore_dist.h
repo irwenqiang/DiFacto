@@ -68,7 +68,6 @@ class KVStoreDist : public Store {
     if (IsWorker()) {
       if (barrier_before_exit_) Barrier();
     }
-    ps::Finalize();
     delete ps_worker_;
     delete ps_server_;
   }
