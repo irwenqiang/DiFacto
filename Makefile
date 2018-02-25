@@ -15,6 +15,8 @@ include dmlc-core/make/dmlc.mk
 
 INCPATH = -I./src -I./include -I./dmlc-core/include -I./ps-lite/include -I./dmlc-core/src -I$(DEPS_PATH)/include
 PROTOC = ${DEPS_PATH}/bin/protoc
+#No use openmp
+#CFLAGS = -std=c++11 -fopenmp -fPIC -g -O3 -ggdb -Wall -finline-functions $(INCPATH) -DDMLC_LOG_FATAL_THROW=0 $(ADD_CFLAGS)
 CFLAGS = -std=c++11 -fopenmp -fPIC -g -O3 -ggdb -Wall -finline-functions $(INCPATH) -DDMLC_LOG_FATAL_THROW=0 $(ADD_CFLAGS)
 CFLAGS += $(DMLC_CFLAGS) $(PS_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS += $(DMLC_LDFLAGS) $(PS_LDFLAGS) $(EXTRA_LDFLAGS)
